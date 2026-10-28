@@ -77,10 +77,12 @@ async function runTool(name, args) {
     }
 
     return "Unknown tool";
-  } catch {
-    return "Tool failed";
+    } catch (error) {
+    console.error("Tool error:", error);
+    return `Tool failed: ${error.message}`;
   }
 }
+
 
 // Ek IP se 1 minute mein limit se zyada requests nahi
 const chatLimiter = rateLimit({
