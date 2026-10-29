@@ -1,4 +1,3 @@
-
 require("dotenv").config();
 
 const express = require("express");
@@ -144,21 +143,6 @@ function calculate(expression) {
   return result;
 }
 
-async function fetchWeatherJson(url, label) {
-  console.log(`[Weather] Requesting ${label}`);
-
-  const response = await fetch(url, {
-    signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS),
-    headers: { Accept: "application/json" },
-  });
-
-  if (!response.ok) {
-    throw new Error(`${label} returned HTTP ${response.status}`);
-  }
-
-  return response.json();
-}
-
 async function runTool(name, args) {
   try {
     if (name === "calculator") {
@@ -172,70 +156,55 @@ async function runTool(name, args) {
         return "Please provide a city name.";
       }
 
-      const geoUrl =
-        "https://geocoding-api.open-meteo.com/v1/search" +
-        `?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
+      const apiKey = process.env.OPENWEATHER_API_KEY;
 
-      let geo;
-
-      try {
-        geo = await fetchWeatherJson(geoUrl, "geocoding API");
-      } catch (error) {
-        console.error("[Weather geocoding error]", {
-          message: error.message,
-          cause: error.cause?.message,
-          code: error.cause?.code,
-        });
-
-        return "Weather lookup failed while finding the city. Please try again later.";
+      if (!apiKey) {
+        console.error("[Weather] OPENWEATHER_API_KEY is missing");
+        return "Weather is not configured on the server.";
       }
 
-      const place = geo.results?.[0];
+      const url =
+        "https://api.openweathermap.org/data/2.5/weather" +
+        `?q=${encodeURIComponent(city)}&units=metric&appid=${apiKey}`;
 
-      if (!place) {
+      // URL ko kabhi log mat karna, usme key hoti hai
+      console.log("[Weather] Requesting OpenWeatherMap");
+
+      let response;
+
+      try {
+        response = await fetch(url, {
+          signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS),
+          headers: { Accept: "application/json" },
+        });
+      } catch (error) {
+        console.error("[Weather error]", {
+          message: error.message,
+          code: error.cause?.code,
+        });
+        return "Live weather could not be retrieved (network error).";
+      }
+
+      if (response.status === 404) {
         return `City not found: ${city}`;
       }
 
-      const weatherUrl =
-        "https://api.open-meteo.com/v1/forecast" +
-        `?latitude=${place.latitude}` +
-        `&longitude=${place.longitude}` +
-        "&current=temperature_2m,wind_speed_10m" +
-        `&timezone=${encodeURIComponent(place.timezone || "auto")}`;
-
-      let weather;
-
-      try {
-        weather = await fetchWeatherJson(weatherUrl, "forecast API");
-      } catch (error) {
-        console.error("[Weather forecast error]", {
-          message: error.message,
-          cause: error.cause?.message,
-          code: error.cause?.code,
-        });
-
-        return "The city was found, but its weather data could not be fetched.";
+      if (!response.ok) {
+        console.error("[Weather error] HTTP", response.status);
+        return `Live weather could not be retrieved (weather service returned HTTP ${response.status}).`;
       }
 
-      const current = weather.current;
-
-      if (
-        !current ||
-        typeof current.temperature_2m !== "number" ||
-        typeof current.wind_speed_10m !== "number"
-      ) {
-        console.error("[Weather] Unexpected response:", weather);
-        return "Weather data is temporarily unavailable.";
-      }
+      const w = await response.json();
 
       return JSON.stringify({
-        city: place.name,
-        country: place.country || "",
-        temperature_c: current.temperature_2m,
-        wind_speed_kmh: current.wind_speed_10m,
-        time: current.time,
-        timezone: weather.timezone || place.timezone || "auto",
-        source: "Open-Meteo",
+        city: w.name,
+        country: w.sys?.country || "",
+        temperature_c: w.main?.temp,
+        feels_like_c: w.main?.feels_like,
+        humidity_percent: w.main?.humidity,
+        wind_speed_ms: w.wind?.speed,
+        description: w.weather?.[0]?.description,
+        source: "OpenWeatherMap",
       });
     }
 
@@ -329,7 +298,8 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
     {
       role: "system",
       content:
-        "You are a helpful assistant. Reply in the user's language. " +
+        "You are AI Agent Chat, a helpful assistant built by Akash. " +
+        "Reply in the user's language. " +
         "Use tools when useful. For weather, use only the actual tool result. " +
         "Never invent live weather data. If a tool fails, clearly say that " +
         "live weather could not be retrieved.",
