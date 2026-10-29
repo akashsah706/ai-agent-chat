@@ -2,8 +2,10 @@
 
 A ChatGPT-style AI chat app with **real-time streaming** and **tool calling**. The AI can decide to call tools (calculator, weather), and the UI shows each tool step live while the answer streams in word by word.
 
-**Live demo:** _add your Vercel link here_
-**Backend API:** _add your Render link here_
+## Live Demo
+
+- Frontend: https://ai-agent-chat-nu.vercel.app/
+- Backend: https://ai-agent-chat-xopj.onrender.com
 
 > The backend runs on a free Render instance, so the first message after a long idle period can take up to a minute while the server wakes up.
 
